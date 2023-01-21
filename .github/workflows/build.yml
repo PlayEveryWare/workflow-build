@@ -421,6 +421,8 @@ jobs:
         uses: PlayEveryWare/action-host-cpumem@v1
 
       - name: Call build script
+        env:
+          MATRIX: ${{ needs.prepare.outputs.matrix }}
         run: |
 
           # set build environment
@@ -430,6 +432,14 @@ jobs:
           $env:PEW_BUILD_ARTIFACT = '${{ github.workspace }}/build/${{ steps.artifact-name.outputs.name }}'
           $env:PEW_BUILD_HOST_CPUS = '${{ steps.host-resources.outputs.cpu-count }}'
           $env:PEW_BUILD_HOST_MEM = '${{ steps.host-resources.outputs.memory-gb }}'
+
+          # set all SDK variables
+          $matrix = ConvertFrom-Json -InputObject $env:MATRIX
+          foreach ($platform in $matrix.platform) {
+            $name = $platform.name.ToUpper()
+            $sdk = $platform.sdk
+            New-Item "env:/PEW_BUILD_SDK_VERSION_$( $name )" -Value "$sdk"
+          }
 
           # remove the build folder if it exists
           if ( Test-Path -Path  ${{ github.workspace }}/build ) {
