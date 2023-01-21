@@ -1,0 +1,532 @@
+name: Build a project
+
+on:
+  workflow_call:
+    inputs:
+      repository:
+        description: 'Source repository to use'
+        type: string
+        default: ${{ github.repository }}
+
+      project-name:
+        description: 'Name of the project'
+        required: true
+        type: string
+
+      branch-name:
+        description: 'Branch or ref from which to build'
+        required: false
+        type: string
+
+      build-script:
+        description: 'Script used to generate a build'
+        required: false
+        type: string
+        default: 'title/.github/workflows/pew_build.ps1'
+
+      google-drive-folder:
+        description: 'Build depot Google Drive folder id'
+        required: true
+        type: string
+
+      google-drive-folder-custom:
+        description: 'Build depot Google Drive folder id for custom builds'
+        required: false
+        type: string
+
+      slack-channel:
+        description: 'Optional slack channel for notifications'
+        required: false
+        type: string
+
+      configurations:
+        description: 'Comma separated list of build configurations'
+        required: true
+        default: 'Release'
+        type: string
+
+      pc64:
+        description: 'Boolean to build PC 64'
+        required: false
+        type: boolean
+
+      nx64:
+        description: 'Nintendo Switch SDK version to use'
+        required: false
+        type: string
+
+      xbs:
+        description: 'Xbox Series GDK version to use'
+        required: false
+        type: string
+
+      ps5:
+        description: 'PS5 SDK version to use'
+        required: false
+        type: string
+
+jobs:
+  prepare:
+    name: Prepare build metadata
+    runs-on: [self-hosted, Windows]
+    outputs:
+      initiator: ${{ steps.initiator.outputs.value }}
+      installation-id: ${{ steps.app-installation.outputs.installation-id }}
+      branch-name: ${{ steps.branch-name.outputs.value }}
+      ref: ${{ steps.checkout-ref.outputs.value }}
+      upload-folder: ${{ steps.build-folder.outputs.value }}
+      short-name: ${{ steps.names.outputs.short }}
+      artifact-name: ${{ steps.names.outputs.template }}
+      slack-thread-ts: ${{ steps.slack.outputs.ts }}
+      slack-thread-channel: ${{ steps.slack.outputs.channel_id }}
+      matrix: ${{ steps.matrix.outputs.value }}
+    steps:
+
+      - name: Validate workflow inputs
+        run: |
+          if ( ! '${{ inputs.repository }}' ) {
+            echo '::error::No repository input specified'
+            exit 1
+          }
+
+          if ( ! '${{ inputs.google-drive-folder }}' ) {
+            echo '::error::No google-drive-folder input specified'
+            exit 1
+          }
+
+          if ( ! '${{ secrets.PEW_BUILDER_KEY_EL9FMYV8DVTLYMLSZJZRVL569RFZWPS }}' ) {
+            echo '::error::Repository has not set the PEW_BUILDER_KEY_EL9FMYV8DVTLYMLSZJZRVL569RFZWPS secret'
+            exit 1
+          }
+
+          if ( '${{ inputs.slack-channel }}' -and ! '${{ secrets.SLACK_BOT_TOKEN }}' ) {
+            echo '::error::A slack channel was specified, but the repository has not set the SLACK_BOT_TOKEN secret'
+            exit 1
+          }
+
+          if ( ! '${{ secrets.GOOGLE_UPLOAD_CREDENTIALS }}' ) {
+            echo '::error::Repository has not set the GOOGLE_UPLOAD_CREDENTIALS secret'
+            exit 1
+          }
+
+      - name: Determine build initiator
+        id: initiator
+        run: |
+          if ( '${{ github.event_name }}' -eq 'schedule' ) {
+            echo 'value=Scheduled Build' >> $env:GITHUB_OUTPUT
+          } else {
+            echo 'value=${{ github.actor }}' >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Determine build upload folder
+        id: build-folder
+        run: |
+          if ( '${{ inputs.branch-name }}' -and '${{ inputs.google-drive-folder-custom }}') {
+            echo 'value=${{ inputs.google-drive-folder-custom }}' >> $env:GITHUB_OUTPUT
+          } else {
+            echo 'value=${{ inputs.google-drive-folder }}' >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Find builder installation for ${{ inputs.repository }}
+        id: app-installation
+        uses: PlayEveryWare/action-find-app-installation@v1
+        with:
+          private-key: ${{ secrets.PEW_BUILDER_KEY_EL9FMYV8DVTLYMLSZJZRVL569RFZWPS }}
+          repository: ${{ inputs.repository }}
+
+      - name: Acquire builder installation token for ${{ inputs.repository }}
+        id: app-token
+        uses: PlayEveryWare/action-app-installation-pat@v1
+        with:
+          installation-id: ${{ steps.app-installation.outputs.installation-id }}
+          private-key: ${{ secrets.PEW_BUILDER_KEY_EL9FMYV8DVTLYMLSZJZRVL569RFZWPS }}
+          repositories: ${{ inputs.repository }}
+
+      - name: Determine branch name
+        id: branch-name
+        run: |
+          if ( '${{ inputs.branch-name }}' ) {
+            echo 'value=${{ inputs.branch-name }}' >> $env:GITHUB_OUTPUT
+          } else {
+            #$headers = @{
+            #  'Accept' = 'application/vnd.github+json';
+            #  'Authorization' = 'Bearer ${{ steps.app-token.outputs.token }}';
+            #  'X-GitHub-Api-Version' = '2022-11-28';
+            #}
+
+            #$response = Invoke-WebRequest `
+            #  -UseBasicParsing `
+            #  -Uri 'https://api.github.com/repos/${{ inputs.repository }}' `
+            #  -Headers $headers
+            #if ( !$response -or ( $response.StatusCode -ne 200 ) ) {
+            #  echo '::error::Failed to get repository metadata from GitHub'
+            #  echo $response
+            #  exit 1
+            #}
+
+            #$result = ConvertFrom-Json -InputObject $response.Content
+            #if ( !$result.default_branch ) {
+            #  echo '::error::Failed to get default_branch from repository metadata'
+            #  echo $result
+            #  exit 1
+            #}
+
+            #echo "value=$( $result.default_branch )" >> $env:GITHUB_OUTPUT
+            echo 'value=${{ github.ref_name }}' >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Determine the checkout ref for ${{ steps.branch-name.outputs.value }}
+        id: checkout-ref
+        run: |
+
+          $result = git ls-remote `
+            'https://${{ github.actor }}:${{ steps.app-token.outputs.token }}@github.com/${{ inputs.repository }}' `
+            refs/heads/${{ steps.branch-name.outputs.value }}
+          if ( !$result ) {
+            echo '::error::Failed to find the remote ref for ${{ inputs.repository }}'
+            echo $result
+            exit 1
+          }
+
+          $match = Select-String `
+            -InputObject $result `
+            -Pattern '([0-9|a-f|A-F]+)\s+refs/heads/${{ steps.branch-name.outputs.value }}$'
+          if ( !$match -or ( $match.Matches.Groups.Length -ne 2 ) ) {
+            echo '::error::Failed to find the name ${{ steps.branch-name.outputs.value }} in the remote ref list'
+            echo $result
+            echo $match
+            exit 1
+          }
+
+          echo "value=$( $match.Matches.Groups[1] )" >> $env:GITHUB_OUTPUT
+
+      - name: Get timestamp for checkout ref
+        id: timestamp
+        run: |
+
+          $headers = @{
+            'Accept' = 'application/vnd.github+json';
+            'Authorization' = 'Bearer ${{ steps.app-token.outputs.token }}';
+            'X-GitHub-Api-Version' = '2022-11-28';
+          }
+
+          $response = Invoke-WebRequest `
+            -UseBasicParsing `
+            -Uri 'https://api.github.com/repos/${{ inputs.repository }}/commits/${{ steps.checkout-ref.outputs.value }}' `
+            -Headers $headers
+          if ( !$response -or ( $response.StatusCode -ne 200 ) ) {
+            echo '::error::Failed to get commit metadata from GitHub'
+            echo $response
+            exit 1
+          }
+
+          $result = ConvertFrom-Json -InputObject $response.Content
+          if ( !$result.commit -or !$result.commit.author -or !$result.commit.author.date ) {
+            echo '::error::Failed to get commit date from repository metadata'
+            echo $result
+            exit 1
+          }
+
+          echo "value=$( $result.commit.author.date )" >> $env:GITHUB_OUTPUT
+
+      - name: Generate artifact names
+        id: names
+        uses: PlayEveryWare/action-create-build-name@v3
+        with:
+          project-name: ${{ inputs.project-name }}
+          branch-name: ${{ steps.branch-name.outputs.value }}
+          date: ${{ steps.timestamp.outputs.value }}Z
+          ref: ${{ steps.checkout-ref.outputs.value }}
+
+      - name: Notify slack that the build is starting
+        id: slack
+        if: ${{ inputs.slack-channel }}
+        uses: PlayEveryWare/action-slack@v1-pew
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        with:
+          channel-id: ${{ inputs.slack-channel }}
+          slack-message: ":waiting: Build `${{ steps.names.outputs.short }}` started by `${{ steps.initiator.outputs.value }}` from branch `${{ steps.branch-name.outputs.value }}`"
+
+      - name: Append log location to slack thread
+        if: ${{ inputs.slack-channel }}
+        uses: PlayEveryWare/action-slack@v1-pew
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        with:
+          channel-id: ${{ inputs.slack-channel }}
+          payload: |
+            {
+                "text": "See logs at: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                "thread_ts": "${{ steps.slack.outputs.ts }}"
+            }
+
+      - name: Generate build matrix
+        id: matrix
+        run: |
+
+          $configNames = '${{ inputs.configurations }}'.Split(',')
+          $configs = @()
+          foreach ($i in 0..($configNames.Length - 1)) {
+            $configs += @{
+                "name" = $configNames[$i];
+                "index" = $i;
+            }
+          }
+
+
+          $platformList = @()
+          $platformIndex = 0
+
+          if ( '${{ inputs.pc64 }}' -eq 'true' ) {
+            $platformList += @{
+              'name' = 'pc64';
+              'runner' = "['self-hosted', 'Windows']";
+              'sdk' = '';
+              'index' = $platformIndex;
+            }
+            $platformIndex++
+          }
+
+          if ( '${{ inputs.nx64 }}' ) {
+            $platformList += @{
+              'name' = 'nx64';
+              'runner' = "['self-hosted', 'Windows']";
+              'sdk' = '${{ inputs.nx64 }}';
+              'index' = $platformIndex;
+            }
+            $platformIndex++
+          }
+
+          if ( '${{ inputs.xbs }}' ) {
+            $platformList += @{
+              'name' = 'xbs';
+              'runner' = "['self-hosted', 'Windows']";
+              'sdk' = '${{ inputs.xbs }}';
+              'index' = $platformIndex;
+            }
+            $platformIndex++
+          }
+
+          if ( '${{ inputs.ps5 }}' ) {
+            $platformList += @{
+              'name' = 'ps5';
+              'runner' = "['self-hosted', 'Windows']";
+              'sdk' = '${{ inputs.ps5 }}';
+              'index' = $platformIndex;
+            }
+            $platformIndex++
+          }
+
+          $matrix = @{
+            "platform" = $platformList;
+            "configuration" = $configs;
+          }
+
+          # Ensure we have enough output space T___T
+          # This is only needed because of how we work around matrix output limitations
+          $totalOuputs = $platformList.Length * $configs.Length
+          if ( $totalOutputs > 12 ) {
+            echo "::error::There are too many configurations ($( $totalOutputs )) for the native build action"
+            echo "::error::Either reduce the configuration matrix, our modify github.com/PlayEveryWare/workflow-build"
+            exit 1
+          }
+
+          echo "value=$( $matrix | ConvertTo-Json -Compress )" >> $env:GITHUB_OUTPUT
+
+  build:
+    name: Build ${{ matrix.platform.name }}|${{ matrix.configuration.name }} ${{ needs.prepare.outputs.short-name }}
+    needs: [prepare]
+    strategy:
+      matrix: ${{ fromJSON( needs.prepare.outputs.matrix ) }}
+    runs-on: ${{ fromJSON( matrix.platform.runner ) }}
+    outputs: ###NOTE(mendsley): This is to work around the lack of unique or dynamic job outputs
+      artifact-name-0: ${{ steps.output.outputs.name-0 }}
+      artifact-name-1: ${{ steps.output.outputs.name-1 }}
+      artifact-name-2: ${{ steps.output.outputs.name-2 }}
+      artifact-name-3: ${{ steps.output.outputs.name-3 }}
+      artifact-name-4: ${{ steps.output.outputs.name-4 }}
+      artifact-name-5: ${{ steps.output.outputs.name-5 }}
+      artifact-name-6: ${{ steps.output.outputs.name-6 }}
+      artifact-name-7: ${{ steps.output.outputs.name-7 }}
+      artifact-name-8: ${{ steps.output.outputs.name-8 }}
+      artifact-name-9: ${{ steps.output.outputs.name-9 }}
+      artifact-name-10: ${{ steps.output.outputs.name-10 }}
+      artifact-name-11: ${{ steps.output.outputs.name-11 }}
+      file-id-0: ${{ steps.output.outputs.file-id-0 }}
+      file-id-1: ${{ steps.output.outputs.file-id-1 }}
+      file-id-2: ${{ steps.output.outputs.file-id-2 }}
+      file-id-3: ${{ steps.output.outputs.file-id-3 }}
+      file-id-4: ${{ steps.output.outputs.file-id-4 }}
+      file-id-5: ${{ steps.output.outputs.file-id-5 }}
+      file-id-6: ${{ steps.output.outputs.file-id-6 }}
+      file-id-7: ${{ steps.output.outputs.file-id-7 }}
+      file-id-8: ${{ steps.output.outputs.file-id-8 }}
+      file-id-9: ${{ steps.output.outputs.file-id-9 }}
+      file-id-10: ${{ steps.output.outputs.file-id-10 }}
+      file-id-11: ${{ steps.output.outputs.file-id-11 }}
+    steps:
+
+      - name: Create output index
+        id: output-index
+        run: |
+          $matrix = ConvertFrom-Json -InputObject '${{ needs.prepare.outputs.matrix }}'
+          $index = (${{ matrix.platform.index }} * $matrix.configuration.Length) + ${{ matrix.configuration.index }}
+          echo "value=$( $index )" >> $env:GITHUB_OUTPUT
+
+      - name: Format artifact name
+        id: artifact-name
+        uses: PlayEveryWare/action-create-build-name@format
+        with:
+          template: ${{ needs.prepare.outputs.artifact-name }}
+          build-configuration: ${{ matrix.configuration.name }}
+          platform: ${{ matrix.platform.name }}
+
+      - name: Determine the GitHub LFS cache server to use
+        id: lfs-cache-server
+        run: |
+          $match = ( echo "${{ inputs.repository }}" | `
+            Select-String -Pattern "^PlayEveryWare/.*$" )
+          if ( $match ) {
+            Add-Content -Path "$ENV:GITHUB_OUTPUT" -Encoding ascii -Value "value=https://lfscache.office.playeveryware.com/${{ inputs.repository }}"
+          }
+
+      - name: Acquire builder installation token for the repostiory
+        id: app-token
+        uses: PlayEveryWare/action-app-installation-pat@v1
+        with:
+          installation-id: ${{ needs.prepare.outputs.installation-id }}
+          private-key: ${{ secrets.PEW_BUILDER_KEY_EL9FMYV8DVTLYMLSZJZRVL569RFZWPS }}
+          repositories: ${{ inputs.repository }}
+
+      - name: Checkout repository
+        uses: PlayEveryWare/checkout@v1
+        with:
+          repository: ${{ inputs.repository }}
+          token: ${{ steps.app-token.outputs.token }}
+          path: title
+          ref: ${{ needs.prepare.outputs.ref }}
+          lfs: true
+          lfs-url: ${{ steps.lfs-cache-server.outputs.value }}
+
+      - name: Login to the container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Get host resources
+        id: host-resources
+        uses: PlayEveryWare/action-host-cpumem@v1
+
+      - name: Call build script
+        run: |
+
+          # set build environment
+          $env:PEW_BUILD_PLATFORM = '${{ matrix.platform.name }}'
+          $env:PEW_BUILD_CONFIGURATION = '${{ matrix.configuration.name }}'
+          $env:PEW_BUILD_SDK_VERSION = '${{ matrix.platform.sdk }}'
+          $env:PEW_BUILD_ARTIFACT = '${{ github.workspace }}/build/${{ steps.artifact-name.outputs.name }}'
+          $env:PEW_BUILD_HOST_CPUS = '${{ steps.host-resources.outputs.cpu-count }}'
+          $env:PEW_BUILD_HOST_MEM = '${{ steps.host-resources.outputs.memory-gb }}'
+
+          # remove the build folder if it exists
+          if ( Test-Path -Path  ${{ github.workspace }}/build ) {
+            Remove-Item -Path  ${{ github.workspace }}/build -Force -Recurse | Out-Null
+          }
+
+          # create the build folder
+          New-Item -Path ${{ github.workspace }}/build -ItemType "directory" | Out-Null
+
+          # run the respository build script
+          pushd ${{ github.workspace }}/title
+            ${{ github.workspace }}/${{ inputs.build-script }}
+            if ( ! $? ) {
+              echo '::error::Build script did not execute successfully'
+              exit 1
+            }
+          popd
+
+          # make sure the build generated the artifact
+          if ( !( Test-Path -Path $env:PEW_BUILD_ARTIFACT ) ) {
+            echo "::error::Build did not generate the specified artifact: $( $env:PEW_BUILD_ARTIFACT )"
+            exit 1
+          }
+
+      - name: Upload build artifact
+        id: upload
+        uses: PlayEveryWare/action-google-drive-upload@v1
+        with:
+          credentials: ${{ secrets.GOOGLE_UPLOAD_CREDENTIALS }}
+          parent_folder_id: ${{ needs.prepare.outputs.upload-folder }}
+          target: ${{ github.workspace }}\build\${{ steps.artifact-name.outputs.name }}
+          name: ${{ steps.artifact-name.outputs.name }}
+
+      - name: Genarate report outputs
+        id: output
+        run: |
+          echo "file-id-${{ steps.output-index.outputs.value }}=${{ steps.upload.outputs.file-id }}" >> $env:GITHUB_OUTPUT
+          echo "name-${{ steps.output-index.outputs.value }}=${{ steps.artifact-name.outputs.name }}" >> $env:GITHUB_OUTPUT
+
+  report:
+    name: Report build status
+    needs: [prepare, build]
+    runs-on: [self-hosted, Windows]
+    if: ${{ always() && needs.prepare.outputs.slack-thread-ts }}
+    env:
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+    steps:
+
+      - name: Generate success message
+        id: message
+        env:
+          OUTPUTS: ${{ toJSON(needs.build.outputs) }}
+          MATRIX: ${{ needs.prepare.outputs.matrix }}
+        run: |
+
+          $matrix = ConvertFrom-Json -InputObject $env:MATRIX
+          $outputs = ConvertFrom-Json -InputObject $env:OUTPUTS
+
+          $sb = [System.Text.StringBuilder]::new()
+          $sb.Append( ':white_check_mark: Build `${{ needs.prepare.outputs.short-name }}` completed. Started by `${{ needs.prepare.outputs.initiator }}` from branch `${{ needs.prepare.outputs.branch-name }}`' )
+
+          $numConfigurations = $matrix.configuration.Length
+
+          foreach ($platform in $matrix.platform) {
+            foreach ($configuration in $matrix.configuration) {
+              $index = ($platform.index * $numConfigurations) + $configuration.index
+              $artifactName = $outputs."artifact-name-$( $index )"
+              $fileId = $outputs."file-id-$( $index )"
+              $googleDriveLink = "https://drive.google.com/file/d/$( $fileId )/view?usp_share_link"
+
+              $sb.Append("`n * $( $platform.name.ToUpper() )`|$( $configuration.name ): <$( $googleDriveLink )`|$( $artifactName )>")
+            }
+          }
+
+          $jsonString = $sb.ToString() | ConvertTo-Json -Compress
+          echo "value=$( $jsonString )" >> $env:GITHUB_OUTPUT
+
+      - name: Notify slack that the build completed
+        if: ${{ needs.build.result == 'success' }}
+        uses: PlayEveryWare/action-slack@v1-pew
+        with:
+          channel-id: ${{ needs.prepare.outputs.slack-thread-channel }}
+          update-ts: ${{ needs.prepare.outputs.slack-thread-ts }}
+          slack-message: ${{ fromJSON( steps.message.outputs.value ) }}
+
+      - name: Notify slack that the build failed
+        if: ${{ contains(needs.build.result, 'failure') }}
+        uses: PlayEveryWare/action-slack@v1-pew
+        with:
+          channel-id: ${{ needs.prepare.outputs.slack-thread-channel }}
+          update-ts: ${{ needs.prepare.outputs.slack-thread-ts }}
+          slack-message: ":x: Build `${{ needs.prepare.outputs.short-name }}` has failed. Started by `${{ needs.prepare.outputs.initiator }}` from branch `${{ needs.prepare.outputs.branch-name }}`\n * Logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Notify slack that the build was canceled
+        if: ${{ !contains(needs.build.result, 'failure') && !contains(needs.build.result, 'success') }}
+        uses: PlayEveryWare/action-slack@v1-pew
+        with:
+          channel-id: ${{ needs.prepare.outputs.slack-thread-channel }}
+          update-ts: ${{ needs.prepare.outputs.slack-thread-ts }}
+          slack-message: ":heavy_multiplication_x: Build `${{ needs.prepare.outputs.short-name }}` has been cancelled. Started by `${{ needs.prepare.outputs.initiator }}` from branch `${{ needs.prepare.outputs.brnach-name }}`"
