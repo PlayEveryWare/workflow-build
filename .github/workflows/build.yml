@@ -432,6 +432,7 @@ jobs:
           $env:PEW_BUILD_ARTIFACT = '${{ github.workspace }}/build/${{ steps.artifact-name.outputs.name }}'
           $env:PEW_BUILD_HOST_CPUS = '${{ steps.host-resources.outputs.cpu-count }}'
           $env:PEW_BUILD_HOST_MEM = '${{ steps.host-resources.outputs.memory-gb }}'
+          $env:PEW_BUILD_BRANCH_NAME = '${{ needs.prepare.outputs.branch-name }}'
 
           # set all SDK variables
           $matrix = ConvertFrom-Json -InputObject $env:MATRIX
