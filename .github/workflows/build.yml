@@ -429,7 +429,7 @@ jobs:
           $env:PEW_BUILD_PLATFORM = '${{ matrix.platform.name }}'
           $env:PEW_BUILD_CONFIGURATION = '${{ matrix.configuration.name }}'
           $env:PEW_BUILD_SDK_VERSION = '${{ matrix.platform.sdk }}'
-          $env:PEW_BUILD_ARTIFACT = '${{ github.workspace }}/build/${{ steps.artifact-name.outputs.name }}'
+          $env:PEW_BUILD_ARTIFACT = '${{ github.workspace }}/build/output.zip'
           $env:PEW_BUILD_HOST_CPUS = '${{ steps.host-resources.outputs.cpu-count }}'
           $env:PEW_BUILD_HOST_MEM = '${{ steps.host-resources.outputs.memory-gb }}'
           $env:PEW_BUILD_BRANCH_NAME = '${{ needs.prepare.outputs.branch-name }}'
@@ -471,7 +471,7 @@ jobs:
         with:
           credentials: ${{ secrets.GOOGLE_UPLOAD_CREDENTIALS }}
           parent_folder_id: ${{ needs.prepare.outputs.upload-folder }}
-          target: ${{ github.workspace }}\build\${{ steps.artifact-name.outputs.name }}
+          target: ${{ github.workspace }}\build\output.zip
           name: ${{ steps.artifact-name.outputs.name }}
 
       - name: Genarate report outputs
