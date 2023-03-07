@@ -46,9 +46,9 @@ on:
         type: string
 
       pc64:
-        description: 'Boolean to build PC 64'
+        description: 'Windows 64 bit SDK to use'
         required: false
-        type: boolean
+        type: string
 
       nx64:
         description: 'Nintendo Switch SDK version to use'
@@ -278,11 +278,11 @@ jobs:
           $platformList = @()
           $platformIndex = 0
 
-          if ( '${{ inputs.pc64 }}' -eq 'true' ) {
+          if ( '${{ inputs.pc64 }}' ) {
             $platformList += @{
               'name' = 'pc64';
               'runner' = "['self-hosted', 'Windows']";
-              'sdk' = '';
+              'sdk' = '${{ inputs.pc64 }}';
               'index' = $platformIndex;
             }
             $platformIndex++
