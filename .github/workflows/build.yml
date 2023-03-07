@@ -45,6 +45,11 @@ on:
         default: 'Release'
         type: string
 
+      pc32:
+        description: 'Windows 32 bit SDK to use'
+        required: false
+        type: string
+
       pc64:
         description: 'Windows 64 bit SDK to use'
         required: false
@@ -278,6 +283,16 @@ jobs:
           $platformList = @()
           $platformIndex = 0
 
+          if ( '${{ inputs.pc32 }}' ) {
+            $platformList += @{
+              'name' = 'pc32';
+              'runner' = "['self-hosted', 'Windows']";
+              'sdk' = '${{ inputs.pc32 }}';
+              'index' = $platformIndex;
+            }
+            $platformIndex++
+          }
+
           if ( '${{ inputs.pc64 }}' ) {
             $platformList += @{
               'name' = 'pc64';
@@ -326,7 +341,7 @@ jobs:
           # Ensure we have enough output space T___T
           # This is only needed because of how we work around matrix output limitations
           $totalOuputs = $platformList.Length * $configs.Length
-          if ( $totalOutputs > 12 ) {
+          if ( $totalOutputs > 15 ) {
             echo "::error::There are too many configurations ($( $totalOutputs )) for the native build action"
             echo "::error::Either reduce the configuration matrix, our modify github.com/PlayEveryWare/workflow-build"
             exit 1
@@ -353,6 +368,9 @@ jobs:
       artifact-name-9: ${{ steps.output.outputs.name-9 }}
       artifact-name-10: ${{ steps.output.outputs.name-10 }}
       artifact-name-11: ${{ steps.output.outputs.name-11 }}
+      artifact-name-12: ${{ steps.output.outputs.name-11 }}
+      artifact-name-13: ${{ steps.output.outputs.name-11 }}
+      artifact-name-14: ${{ steps.output.outputs.name-11 }}
       file-id-0: ${{ steps.output.outputs.file-id-0 }}
       file-id-1: ${{ steps.output.outputs.file-id-1 }}
       file-id-2: ${{ steps.output.outputs.file-id-2 }}
@@ -365,6 +383,9 @@ jobs:
       file-id-9: ${{ steps.output.outputs.file-id-9 }}
       file-id-10: ${{ steps.output.outputs.file-id-10 }}
       file-id-11: ${{ steps.output.outputs.file-id-11 }}
+      file-id-12: ${{ steps.output.outputs.file-id-11 }}
+      file-id-13: ${{ steps.output.outputs.file-id-11 }}
+      file-id-14: ${{ steps.output.outputs.file-id-11 }}
     steps:
 
       - name: Create output index
