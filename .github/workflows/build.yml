@@ -70,6 +70,13 @@ on:
         required: false
         type: string
 
+env:
+  VAULT_ADDR: https://vault.office.playeveryware.com:8200
+
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   prepare:
     name: Prepare build metadata
@@ -99,21 +106,6 @@ jobs:
             exit 1
           }
 
-          if ( ! '${{ secrets.PEW_BUILDER_KEY_EL9FMYV8DVTLYMLSZJZRVL569RFZWPS }}' ) {
-            echo '::error::Repository has not set the PEW_BUILDER_KEY_EL9FMYV8DVTLYMLSZJZRVL569RFZWPS secret'
-            exit 1
-          }
-
-          if ( '${{ inputs.slack-channel }}' -and ! '${{ secrets.SLACK_BOT_TOKEN }}' ) {
-            echo '::error::A slack channel was specified, but the repository has not set the SLACK_BOT_TOKEN secret'
-            exit 1
-          }
-
-          if ( ! '${{ secrets.GOOGLE_UPLOAD_CREDENTIALS }}' ) {
-            echo '::error::Repository has not set the GOOGLE_UPLOAD_CREDENTIALS secret'
-            exit 1
-          }
-
       - name: Determine build initiator
         id: initiator
         run: |
@@ -132,11 +124,22 @@ jobs:
             echo 'value=${{ inputs.google-drive-folder }}' >> $env:GITHUB_OUTPUT
           }
 
+      - name: Acquire slack/builder credentials
+        uses: hashicorp/vault-action@v2
+        with:
+          url: ${{ env.VAULT_ADDR }}
+          role: build-machine
+          method: jwt
+          jwtGithubAudience: sigstore
+          secrets:
+            kv-v2/data/build slack_token | SLACK_BOT_TOKEN ;
+            kv-v2/data/build pew_builder_key | PEW_BUILDER_KEY
+
       - name: Find builder installation for ${{ inputs.repository }}
         id: app-installation
         uses: PlayEveryWare/action-find-app-installation@v1
         with:
-          private-key: ${{ secrets.PEW_BUILDER_KEY_EL9FMYV8DVTLYMLSZJZRVL569RFZWPS }}
+          private-key: ${{ env.PEW_BUILDER_KEY }}
           repository: ${{ inputs.repository }}
 
       - name: Acquire builder installation token for ${{ inputs.repository }}
@@ -144,7 +147,7 @@ jobs:
         uses: PlayEveryWare/action-app-installation-pat@v1
         with:
           installation-id: ${{ steps.app-installation.outputs.installation-id }}
-          private-key: ${{ secrets.PEW_BUILDER_KEY_EL9FMYV8DVTLYMLSZJZRVL569RFZWPS }}
+          private-key: ${{ env.PEW_BUILDER_KEY }}
           repositories: ${{ inputs.repository }}
 
       - name: Determine branch name
@@ -247,8 +250,6 @@ jobs:
         id: slack
         if: ${{ inputs.slack-channel }}
         uses: PlayEveryWare/action-slack@v1-pew
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
         with:
           channel-id: ${{ inputs.slack-channel }}
           slack-message: ":waiting: Build `${{ steps.names.outputs.short }}` started by `${{ steps.initiator.outputs.value }}` from branch `${{ steps.branch-name.outputs.value }}`"
@@ -256,8 +257,6 @@ jobs:
       - name: Append log location to slack thread
         if: ${{ inputs.slack-channel }}
         uses: PlayEveryWare/action-slack@v1-pew
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
         with:
           channel-id: ${{ inputs.slack-channel }}
           payload: |
@@ -412,12 +411,23 @@ jobs:
             Add-Content -Path "$ENV:GITHUB_OUTPUT" -Encoding ascii -Value "value=https://lfscache.office.playeveryware.com/${{ inputs.repository }}"
           }
 
+      - name: Acquire builder/upload credentials
+        uses: hashicorp/vault-action@v2
+        with:
+          url: ${{ env.VAULT_ADDR }}
+          role: build-machine
+          method: jwt
+          jwtGithubAudience: sigstore
+          secrets:
+            kv-v2/data/build pew_builder_key | PEW_BUILDER_KEY ;
+            kv-v2/data/build google_upload_credentials | GOOGLE_UPLOAD_CREDENTIALS
+
       - name: Acquire builder installation token for the repostiory
         id: app-token
         uses: PlayEveryWare/action-app-installation-pat@v1
         with:
           installation-id: ${{ needs.prepare.outputs.installation-id }}
-          private-key: ${{ secrets.PEW_BUILDER_KEY_EL9FMYV8DVTLYMLSZJZRVL569RFZWPS }}
+          private-key: ${{ env.PEW_BUILDER_KEY }}
           repositories: ${{ inputs.repository }}
 
       - name: Checkout repository
@@ -490,7 +500,7 @@ jobs:
         id: upload
         uses: PlayEveryWare/action-google-drive-upload@v1
         with:
-          credentials: ${{ secrets.GOOGLE_UPLOAD_CREDENTIALS }}
+          credentials: ${{ env.GOOGLE_UPLOAD_CREDENTIALS }}
           parent_folder_id: ${{ needs.prepare.outputs.upload-folder }}
           target: ${{ github.workspace }}\build\output.zip
           name: ${{ steps.artifact-name.outputs.name }}
@@ -506,9 +516,17 @@ jobs:
     needs: [prepare, build]
     runs-on: [self-hosted, Windows]
     if: ${{ always() && needs.prepare.outputs.slack-thread-ts }}
-    env:
-      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
     steps:
+
+      - name: Acquire slack credentials
+        uses: hashicorp/vault-action@v2
+        with:
+          url: ${{ env.VAULT_ADDR }}
+          role: build-machine
+          method: jwt
+          jwtGithubAudience: sigstore
+          secrets:
+            kv-v2/data/build slack_token | SLACK_BOT_TOKEN ;
 
       - name: Generate success message
         id: message
