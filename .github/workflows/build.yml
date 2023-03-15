@@ -125,7 +125,7 @@ jobs:
           }
 
       - name: Acquire slack/builder credentials
-        uses: hashicorp/vault-action@v2
+        uses: hashicorp/vault-action@v2.5.0
         with:
           url: ${{ env.VAULT_ADDR }}
           role: build-machine
@@ -412,7 +412,7 @@ jobs:
           }
 
       - name: Acquire builder/upload credentials
-        uses: hashicorp/vault-action@v2
+        uses: hashicorp/vault-action@v2.5.0
         with:
           url: ${{ env.VAULT_ADDR }}
           role: build-machine
@@ -519,7 +519,7 @@ jobs:
     steps:
 
       - name: Acquire slack credentials
-        uses: hashicorp/vault-action@v2
+        uses: hashicorp/vault-action@v2.5.0
         with:
           url: ${{ env.VAULT_ADDR }}
           role: build-machine
