@@ -249,14 +249,14 @@ jobs:
 
       - name: Notify slack that the build is starting
         id: slack
-        if: ${{ inputs.slack-channel }}
+        if: ${{ inputs.slack-channel && github.event_name != 'pull_request' }}
         uses: PlayEveryWare/action-slack@v1-pew
         with:
           channel-id: ${{ inputs.slack-channel }}
           slack-message: ":waiting: Build `${{ steps.names.outputs.short }}` started by `${{ steps.initiator.outputs.value }}` from branch `${{ steps.branch-name.outputs.value }}`"
 
       - name: Append log location to slack thread
-        if: ${{ inputs.slack-channel }}
+        if: ${{ inputs.slack-channel && github.event_name != 'pull_request' }}
         uses: PlayEveryWare/action-slack@v1-pew
         with:
           channel-id: ${{ inputs.slack-channel }}
@@ -500,7 +500,7 @@ jobs:
       - name: Upload build artifact
         id: upload
         uses: PlayEveryWare/action-google-drive-upload@v1
-        if: ${{ github.event_name }} != 'pull_request'
+        if: ${{ github.event_name != 'pull_request' }}
         with:
           credentials: ${{ env.GOOGLE_UPLOAD_CREDENTIALS }}
           parent_folder_id: ${{ needs.prepare.outputs.upload-folder }}
