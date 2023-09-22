@@ -187,10 +187,15 @@ jobs:
       - name: Determine the checkout ref for ${{ steps.branch-name.outputs.value }}
         id: checkout-ref
         run: |
+          $refName = 'refs/heads/${{ steps.branch-name.outputs.value }}'
+          if ( '${{ github.event_name }}' -eq 'pull_request' ) {
+            $pullName = '${{ steps.branch-name.outputs.value }}'.Replace('/merge', '');
+            $refName = "refs/pull/$( $pullName )/head"
+          }
 
           $result = git ls-remote `
             'https://${{ github.actor }}:${{ steps.app-token.outputs.token }}@github.com/${{ inputs.repository }}' `
-            refs/heads/${{ steps.branch-name.outputs.value }}
+            $refName
           if ( !$result ) {
             echo '::error::Failed to find the remote ref for ${{ inputs.repository }}'
             echo $result
@@ -199,9 +204,9 @@ jobs:
 
           $match = Select-String `
             -InputObject $result `
-            -Pattern '([0-9|a-f|A-F]+)\s+refs/heads/${{ steps.branch-name.outputs.value }}$'
+            -Pattern "([0-9|a-f|A-F]+)\s+$( $refName )$"
           if ( !$match -or ( $match.Matches.Groups.Length -ne 2 ) ) {
-            echo '::error::Failed to find the name ${{ steps.branch-name.outputs.value }} in the remote ref list'
+            echo "::error::Failed to find the name $( $refName ) in the remote ref list"
             echo $result
             echo $match
             exit 1
