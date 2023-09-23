@@ -355,7 +355,7 @@ jobs:
           echo "value=$( $matrix | ConvertTo-Json -Compress )" >> $env:GITHUB_OUTPUT
 
   build:
-    name: Build ${{ matrix.platform.name }}|${{ matrix.configuration.name }} ${{ needs.prepare.outputs.short-name }}
+    name: Build ${{ matrix.platform.name }}|${{ matrix.configuration.name }}
     needs: [prepare]
     strategy:
       matrix: ${{ fromJSON( needs.prepare.outputs.matrix ) }}
