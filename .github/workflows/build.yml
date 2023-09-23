@@ -65,6 +65,11 @@ on:
         required: false
         type: string
 
+      ps4:
+        description: 'PS4 SDK version to use'
+        required: false
+        type: string
+
       ps5:
         description: 'PS5 SDK version to use'
         required: false
@@ -323,6 +328,16 @@ jobs:
               'name' = 'xbs';
               'runner' = "['self-hosted', 'Windows']";
               'sdk' = '${{ inputs.xbs }}';
+              'index' = $platformIndex;
+            }
+            $platformIndex++
+          }
+
+          if ( '${{ inputs.ps4 }}' ) {
+            $platformList += @{
+              'name' = 'ps4';
+              'runner' = "['self-hosted', 'Windows']";
+              'sdk' = '${{ inputs.ps4 }}';
               'index' = $platformIndex;
             }
             $platformIndex++
