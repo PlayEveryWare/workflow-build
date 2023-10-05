@@ -451,6 +451,11 @@ jobs:
           private-key: ${{ env.PEW_BUILDER_KEY }}
           repositories: ${{ inputs.repository }}
 
+      - name: Garbage collect repository
+        run: |
+          pushd title
+          git gc
+
       - name: Checkout repository
         uses: PlayEveryWare/checkout@v1
         with:
