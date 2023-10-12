@@ -39,7 +39,7 @@ on:
         required: false
         type: string
 
-      container-memory:
+      container-memory-gb:
         description: Amount of memory (GB) for container (blank means use all available)
         type: string
         required: false
@@ -493,7 +493,7 @@ jobs:
           $env:PEW_BUILD_SDK_VERSION = '${{ matrix.platform.sdk }}'
           $env:PEW_BUILD_ARTIFACT = '${{ github.workspace }}/build/output.zip'
           $env:PEW_BUILD_HOST_CPUS = '${{ steps.host-resources.outputs.cpu-count }}'
-          $env:PEW_BUILD_HOST_MEM = '${{ steps.host-resources.outputs.memory-gb }}'
+          $env:PEW_BUILD_HOST_MEM = '${{ inputs.container-memory-gb || steps.host-resources.outputs.memory-gb }}'
           $env:PEW_BUILD_BRANCH_NAME = '${{ needs.prepare.outputs.branch-name }}'
 
           # set all SDK variables
