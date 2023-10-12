@@ -39,6 +39,11 @@ on:
         required: false
         type: string
 
+      container-memory:
+        description: Amount of memory (GB) for container (blank means use all available)
+        type: string
+        required: false
+
       configurations:
         description: 'Comma separated list of build configurations'
         required: true
