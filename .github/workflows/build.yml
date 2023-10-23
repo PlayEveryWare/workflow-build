@@ -458,8 +458,10 @@ jobs:
 
       - name: Garbage collect repository
         run: |
-          pushd title
-          git gc
+          if ( Test-Path -Path 'title/.git' ) {
+            pushd title
+            git gc
+          }
 
       - name: Checkout repository
         uses: PlayEveryWare/checkout@v1
