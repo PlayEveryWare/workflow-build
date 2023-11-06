@@ -22,7 +22,7 @@ on:
         description: 'Script used to generate a build'
         required: false
         type: string
-        default: 'title/.github/workflows/pew_build.ps1'
+        default: '.github/workflows/pew_build.ps1'
 
       google-drive-folder:
         description: 'Build depot Google Drive folder id'
@@ -43,6 +43,11 @@ on:
         description: Amount of memory (GB) for container (blank means use all available)
         type: string
         required: false
+
+      container-base:
+        description: Base container to use
+        type: string
+        default: 'builder:vs2022'
 
       configurations:
         description: 'Comma separated list of build configurations'
@@ -379,6 +384,9 @@ jobs:
     needs: [prepare]
     strategy:
       matrix: ${{ fromJSON( needs.prepare.outputs.matrix ) }}
+    env:
+      PEW_BUILD_IMAGE_NAME: "pew-builder-${{ inputs.project-name }}"
+      PEW_BUILD_CONTAINER_NAME: "pew-builder-${{ inputs.project-name }}"
     runs-on: ${{ fromJSON( matrix.platform.runner ) }}
     outputs: ###NOTE(mendsley): This is to work around the lack of unique or dynamic job outputs
       artifact-name-0: ${{ steps.output.outputs.name-0 }}
@@ -484,27 +492,88 @@ jobs:
         id: host-resources
         uses: PlayEveryWare/action-host-cpumem@v1
 
-      - name: Call build script
+      - name: Generate base docker image
+        env:
+          MATRIX: ${{ needs.prepare.outputs.matrix }}
+        run: |
+          $matrix = ConvertFrom-Json -InputObject $env:MATRIX
+
+          $dockerFile = New-Object System.Text.StringBuilder
+
+          # Add SDKs images
+          if ( '${{ inputs.ps5 }}' ) {
+            $dockerfile.AppendLine( 'FROM ghcr.io/playeveryware/console-ps5-sdk:${{ inputs.ps5 }} as ps5' )
+          }
+          if ( '${{ inputs.ps4 }}' ) {
+            $dockerfile.AppendLine( 'FROM ghcr.io/playeveryware/console-ps4-sdk:${{ inputs.ps4 }} as ps4' )
+          }
+          if ( '${{ inputs.xbs }}' ) {
+            $dockerfile.AppendLine( 'FROM ghcr.io/playeveryware/console-gdk:${{ inputs.xbs }} as gdk' )
+          }
+          if ( '${{ inputs.nx64 }}' ) {
+            $dockerfile.AppendLine( 'FROM ghcr.io/playeveryware/console-nx-sdk:${{ inputs.nx64 }} as nx' )
+          }
+
+          $dockerFile.AppendLine( 'FROM ghcr.io/playeveryware/${{ inputs.container-base }}' )
+
+          # Install windows SDK
+          if ( '${{ inputs.pc32 }}' -or '${{ inputs.pc64 }}' ) {
+            $sdk = '${{ inputs.pc32 }}'
+            if ( ! $sdk ) {
+              $sdk = '${{ inputs.pc64 }}'
+            }
+
+            $dockerfile.AppendLine( "RUN choco install --no-progress -y $( $sdk )" )
+          }
+
+          # Install PS5 SDK
+          if ( '${{ inputs.ps5 }}' ) {
+            $dockerfile.AppendLine( 'COPY --from=ps5 ["C:/SCE", "C:/SCE"]' )
+            $dockerfile.AppendLine( 'RUN C:/SCE/ProsperoSDK/install.ps1' )
+          }
+
+          # Install PS4 SDK
+          if ( '${{ inputs.ps4 }}' ) {
+            $dockerfile.AppendLine( 'COPY --from=ps4 ["C:/SCE", "C:/SCE"]' )
+            $dockerfile.AppendLine( 'RUN C:/SCE/OrbisSDK/install.ps1' )
+          }
+
+          # Install GDK
+          if ( '${{ inputs.xbs }}' ) {
+            $dockerfile.AppendLine( 'COPY --from=gdk ["C:/GDK", "C:/GDK"]' )
+            $dockerfile.AppendLine( 'RUN C:/GDK/install.ps1' )
+          }
+
+          # Install NX sdk
+          if ( '${{ inputs.nx64 }}' ) {
+            $dockerfile.AppendLine( 'COPY --from=nx ["C:/Nintendo", "C:/Nintendo"]' )
+            $dockerfile.AppendLine( 'RUN C:/Nintendo/NintendoSDK/install.ps1' )
+          }
+
+          $dockerFile.ToString() | docker build --pull -t $env:PEW_BUILD_IMAGE_NAME -
+
+      - name: Build title docker image
+        run: |
+          if ( Test-Path 'title\.github\Dockerfile' ) {
+            pushd title/.github
+            try {
+              docker build  --build-arg "BASE_IMAGE=$( $env:PEW_BUILD_IMAGE_NAME )"-t $env:PEW_BUILD_IMAGE_NAME .
+            } finally  {
+              popd
+            }
+          }
+
+      - name: Forcibly kill existing builds
+        run: |
+          docker rm -f $env:PEW_BUILD_CONTAINER_NAME
+
+      - name: Build title
         env:
           MATRIX: ${{ needs.prepare.outputs.matrix }}
         run: |
 
           # set build environment
-          $env:PEW_BUILD_PLATFORM = '${{ matrix.platform.name }}'
-          $env:PEW_BUILD_CONFIGURATION = '${{ matrix.configuration.name }}'
-          $env:PEW_BUILD_SDK_VERSION = '${{ matrix.platform.sdk }}'
           $env:PEW_BUILD_ARTIFACT = '${{ github.workspace }}/build/output.zip'
-          $env:PEW_BUILD_HOST_CPUS = '${{ steps.host-resources.outputs.cpu-count }}'
-          $env:PEW_BUILD_HOST_MEM = '${{ inputs.container-memory-gb || steps.host-resources.outputs.memory-gb }}'
-          $env:PEW_BUILD_BRANCH_NAME = '${{ needs.prepare.outputs.branch-name }}'
-
-          # set all SDK variables
-          $matrix = ConvertFrom-Json -InputObject $env:MATRIX
-          foreach ($platform in $matrix.platform) {
-            $name = $platform.name.ToUpper()
-            $sdk = $platform.sdk
-            New-Item "env:/PEW_BUILD_SDK_VERSION_$( $name )" -Value "$sdk" | Out-Null
-          }
 
           # remove the build folder if it exists
           if ( Test-Path -Path  ${{ github.workspace }}/build ) {
@@ -516,10 +585,28 @@ jobs:
 
           # run the respository build script
           pushd ${{ github.workspace }}/title
-            ${{ github.workspace }}/${{ inputs.build-script }}
+            docker run --rm `
+              --cpus="${{ steps.host-resources.outputs.cpu-count }}" `
+              --memory="${{ inputs.container-memory-gb || steps.host-resources.outputs.memory-gb }}G" `
+              -v "$( $pwd.Path ):C:\Source" `
+              --name $env:PEW_BUILD_CONTAINER_NAME `
+              -e "PEW_BUILD_CONFIGURATION=${{ matrix.configuration.name }}" `
+              -e "PEW_BUILD_PLATFORM=${{ matrix.platform.name }}" `
+              -e "PEW_BUILD_BRANCH_NAME=${{ needs.prepare.outputs.branch-name }}" `
+              $env:PEW_BUILD_IMAGE_NAME `
+                'powershell' `
+                '-Command' `
+                'C:\Source\${{ inputs.build-script }}'
             if ( ! $? ) {
-              echo '::error::Build script did not execute successfully'
+              Write-Host '::error::The build did not complete successfully'
               exit 1
+            }
+
+            # move the build artifcat to its proper location
+            if ( Test-Path -Path "$( $pwd.Path )\output.zip" ) {
+              Move-Item `
+                -Path "$( $pwd.Path )\output.zip" `
+                -Destination $env:PEW_BUILD_ARTIFACT
             }
           popd
 
