@@ -421,6 +421,10 @@ jobs:
       file-id-14: ${{ steps.output.outputs.file-id-11 }}
     steps:
 
+      - name: Forcibly kill existing builds
+        run: |
+          docker rm -f $env:PEW_BUILD_CONTAINER_NAME
+
       - name: Create output index
         id: output-index
         run: |
@@ -562,10 +566,6 @@ jobs:
               popd
             }
           }
-
-      - name: Forcibly kill existing builds
-        run: |
-          docker rm -f $env:PEW_BUILD_CONTAINER_NAME
 
       - name: Build title
         env:
