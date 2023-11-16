@@ -496,6 +496,12 @@ jobs:
         id: host-resources
         uses: PlayEveryWare/action-host-cpumem@v1
 
+      - name: Run pre-docker setup
+        run: |
+          if ( Test-Path -Path 'title\.github\workflows\pew_pre_docker.ps1' ) {
+            .\title\.github\workflows\pew_pre_docker.ps1
+          }
+
       - name: Generate base docker image
         env:
           MATRIX: ${{ needs.prepare.outputs.matrix }}
