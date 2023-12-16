@@ -519,6 +519,7 @@ jobs:
           }
           if ( '${{ inputs.xbs }}' ) {
             $dockerfile.AppendLine( 'FROM ghcr.io/playeveryware/console-gdk:${{ inputs.xbs }} as gdk' )
+            $dockerfile.AppendLine( 'FROM ghcr.io/playeveryware/console-gdk-subval:latest as gdksubval' )
           }
           if ( '${{ inputs.nx64 }}' ) {
             $dockerfile.AppendLine( 'FROM ghcr.io/playeveryware/console-nx-sdk:${{ inputs.nx64 }} as nx' )
@@ -558,6 +559,11 @@ jobs:
           if ( '${{ inputs.nx64 }}' ) {
             $dockerfile.AppendLine( 'COPY --from=nx ["C:/Nintendo", "C:/Nintendo"]' )
             $dockerfile.AppendLine( 'RUN C:/Nintendo/NintendoSDK/install.ps1' )
+          }
+
+          # Install GDK Submission Validator
+          if ( '${{ inputs.xbs }}' ) {
+            $dockerfile.AppendLine( 'COPY --from=gdksubval ["C:/SubmissionValidator.dll", "C:/GDK/bin/"]' )
           }
 
           $dockerFile.ToString() | docker build --pull -t $env:PEW_BUILD_IMAGE_NAME -
