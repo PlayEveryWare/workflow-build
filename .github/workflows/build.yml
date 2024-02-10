@@ -141,7 +141,7 @@ jobs:
           }
 
       - name: Acquire slack/builder credentials
-        uses: hashicorp/vault-action@v2.5.0
+        uses: hashicorp/vault-action@v2.8.0
         with:
           url: ${{ env.VAULT_ADDR }}
           role: build-machine
@@ -153,14 +153,14 @@ jobs:
 
       - name: Find builder installation for ${{ inputs.repository }}
         id: app-installation
-        uses: PlayEveryWare/action-find-app-installation@v1
+        uses: pew-actions/find-app-installation@v2
         with:
           private-key: ${{ env.PEW_BUILDER_KEY }}
           repository: ${{ inputs.repository }}
 
       - name: Acquire builder installation token for ${{ inputs.repository }}
         id: app-token
-        uses: PlayEveryWare/action-app-installation-pat@v1
+        uses: pew-actions/app-installation-pat@v2
         with:
           installation-id: ${{ steps.app-installation.outputs.installation-id }}
           private-key: ${{ env.PEW_BUILDER_KEY }}
@@ -260,7 +260,7 @@ jobs:
 
       - name: Generate artifact names
         id: names
-        uses: PlayEveryWare/action-create-build-name@v3
+        uses: pew-actions/create-build-name@v4
         with:
           project-name: ${{ inputs.project-name }}
           branch-name: ${{ steps.branch-name.outputs.value }}
@@ -270,14 +270,14 @@ jobs:
       - name: Notify slack that the build is starting
         id: slack
         if: ${{ inputs.slack-channel && github.event_name != 'pull_request' }}
-        uses: PlayEveryWare/action-slack@v1-pew
+        uses: pew-actions/slack@v2-pew
         with:
           channel-id: ${{ inputs.slack-channel }}
           slack-message: ":waiting: Build `${{ steps.names.outputs.short }}` started by `${{ steps.initiator.outputs.value }}` from branch `${{ steps.branch-name.outputs.value }}`"
 
       - name: Append log location to slack thread
         if: ${{ inputs.slack-channel && github.event_name != 'pull_request' }}
-        uses: PlayEveryWare/action-slack@v1-pew
+        uses: pew-actions/slack@v2-pew
         with:
           channel-id: ${{ inputs.slack-channel }}
           payload: |
@@ -434,7 +434,7 @@ jobs:
 
       - name: Format artifact name
         id: artifact-name
-        uses: PlayEveryWare/action-create-build-name@format
+        uses: pew-actions/format-build-name@v2
         with:
           template: ${{ needs.prepare.outputs.artifact-name }}
           build-configuration: ${{ matrix.configuration.name }}
@@ -450,7 +450,7 @@ jobs:
           }
 
       - name: Acquire builder/upload credentials
-        uses: hashicorp/vault-action@v2.5.0
+        uses: hashicorp/vault-action@v2.8.0
         with:
           url: ${{ env.VAULT_ADDR }}
           role: build-machine
@@ -462,7 +462,7 @@ jobs:
 
       - name: Acquire builder installation token for the repostiory
         id: app-token
-        uses: PlayEveryWare/action-app-installation-pat@v1
+        uses: pew-actions/app-installation-pat@v2
         with:
           installation-id: ${{ needs.prepare.outputs.installation-id }}
           private-key: ${{ env.PEW_BUILDER_KEY }}
@@ -476,7 +476,7 @@ jobs:
           }
 
       - name: Checkout repository
-        uses: PlayEveryWare/checkout@v1
+        uses: pew-actions/checkout@v2
         with:
           repository: ${{ inputs.repository }}
           token: ${{ steps.app-token.outputs.token }}
@@ -486,7 +486,7 @@ jobs:
           lfs-url: ${{ steps.lfs-cache-server.outputs.value }}
 
       - name: Login to the container registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -652,7 +652,7 @@ jobs:
     steps:
 
       - name: Acquire slack credentials
-        uses: hashicorp/vault-action@v2.5.0
+        uses: hashicorp/vault-action@v2.8.0
         with:
           url: ${{ env.VAULT_ADDR }}
           role: build-machine
@@ -692,7 +692,7 @@ jobs:
 
       - name: Notify slack that the build completed
         if: ${{ needs.build.result == 'success' }}
-        uses: PlayEveryWare/action-slack@v1-pew
+        uses: pew-actions/slack@v2-pew
         with:
           channel-id: ${{ needs.prepare.outputs.slack-thread-channel }}
           update-ts: ${{ needs.prepare.outputs.slack-thread-ts }}
@@ -700,7 +700,7 @@ jobs:
 
       - name: Notify slack that the build failed
         if: ${{ contains(needs.build.result, 'failure') }}
-        uses: PlayEveryWare/action-slack@v1-pew
+        uses: pew-actions/slack@v2-pew
         with:
           channel-id: ${{ needs.prepare.outputs.slack-thread-channel }}
           update-ts: ${{ needs.prepare.outputs.slack-thread-ts }}
@@ -708,7 +708,7 @@ jobs:
 
       - name: Notify slack that the build was canceled
         if: ${{ !contains(needs.build.result, 'failure') && !contains(needs.build.result, 'success') }}
-        uses: PlayEveryWare/action-slack@v1-pew
+        uses: pew-actions/slack@v2-pew
         with:
           channel-id: ${{ needs.prepare.outputs.slack-thread-channel }}
           update-ts: ${{ needs.prepare.outputs.slack-thread-ts }}
