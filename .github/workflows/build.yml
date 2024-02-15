@@ -630,7 +630,7 @@ jobs:
 
       - name: Upload build artifact
         id: upload
-        uses: PlayEveryWare/action-google-drive-upload@v1
+        uses: pew-actions/google-drive-upload@v1.2.0
         if: ${{ github.event_name != 'pull_request' }}
         with:
           credentials: ${{ env.GOOGLE_UPLOAD_CREDENTIALS }}
