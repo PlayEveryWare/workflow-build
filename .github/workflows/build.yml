@@ -123,8 +123,8 @@ jobs:
         run: |
             if ( (gh pr view -R ${{ github.repository }} ${{ github.event.pull_request.number }} --json closed | ConvertFrom-Json).closed ) {
               Write-Host '::notice::Canceling build since PR #${{ github.event.pull_request.number }} is no longer open'
-              gh run cancel ${{ github.run_id }}
-              gh run watch ${{ github.run_id }}
+              gh run -R ${{ github.repository }} cancel ${{ github.run_id }}
+              gh run -R ${{ github.repository }} watch ${{ github.run_id }}
             }
 
       - name: Validate workflow inputs
@@ -443,8 +443,8 @@ jobs:
         run: |
             if ( (gh pr view -R ${{ github.repository }} ${{ github.event.pull_request.number }} --json closed | ConvertFrom-Json).closed ) {
               Write-Host '::notice::Canceling build since PR #${{ github.event.pull_request.number }} is no longer open'
-              gh run cancel ${{ github.run_id }}
-              gh run watch ${{ github.run_id }}
+              gh run -R ${{ github.repository }} cancel ${{ github.run_id }}
+              gh run -R ${{ github.repository }} watch ${{ github.run_id }}
             }
 
       - name: Forcibly kill existing builds
