@@ -116,7 +116,7 @@ jobs:
     steps:
 
       - name: Cancel if pull request is closed
-        if: ${{ github.event_name == 'pull_request' && ( github.pull_request.state == 'closed' }}
+        if: ${{ github.event_name == 'pull_request' && (github.pull_request.state == 'closed') }}
         run: |
             gh run cancel ${{ github.run_id }}
             gh run watch ${{ github.run_id }}
@@ -433,7 +433,7 @@ jobs:
     steps:
 
       - name: Cancel if pull request is closed
-        if: ${{ github.event_name == 'pull_request' && ( github.pull_request.state == 'closed' }}
+        if: ${{ github.event_name == 'pull_request' && (github.pull_request.state == 'closed') }}
         run: |
             gh run cancel ${{ github.run_id }}
             gh run watch ${{ github.run_id }}
