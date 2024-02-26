@@ -85,14 +85,17 @@ on:
         required: false
         type: string
 
-env:
-  VAULT_ADDR: https://vault.office.playeveryware.com:8200
-
 permissions:
   actions: write
   contents: read
   packages: read
   id-token: write
+  pull-requests: read
+  checks: read
+
+env:
+  VAULT_ADDR: https://vault.office.playeveryware.com:8200
+  GH_TOKEN: ${{ github.token }}
 
 concurrency:
   group: ${{ github.repository }}-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
@@ -116,10 +119,12 @@ jobs:
     steps:
 
       - name: Cancel if pull request is closed
-        if: ${{ github.event_name == 'pull_request' && (github.pull_request.state == 'closed' || github.pull_request.merged) }}
+        if: ${{ github.event_name == 'pull_request' }}
         run: |
-            gh run cancel ${{ github.run_id }}
-            gh run watch ${{ github.run_id }}
+            if ( (gh pr view ${{ github.event.pull_request.number }} --json closed | ConvertFrom-Json).closed ) {
+              gh run cancel ${{ github.run_id }}
+              gh run watch ${{ github.run_id }}
+            }
 
       - name: Validate workflow inputs
         run: |
@@ -433,10 +438,12 @@ jobs:
     steps:
 
       - name: Cancel if pull request is closed
-        if: ${{ github.event_name == 'pull_request' && (github.pull_request.state == 'closed' || github.pull_request.merged) }}
+        if: ${{ github.event_name == 'pull_request' }}
         run: |
-            gh run cancel ${{ github.run_id }}
-            gh run watch ${{ github.run_id }}
+            if ( (gh pr view ${{ github.event.pull_request.number }} --json closed | ConvertFrom-Json).closed ) {
+              gh run cancel ${{ github.run_id }}
+              gh run watch ${{ github.run_id }}
+            }
 
       - name: Forcibly kill existing builds
         run: |
