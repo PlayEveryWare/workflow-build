@@ -440,7 +440,7 @@ jobs:
       - name: Cancel if pull request is closed
         if: ${{ github.event_name == 'pull_request' }}
         run: |
-            if ( (gh pr view ${{ github.event.pull_request.number }} --json closed | ConvertFrom-Json).closed ) {
+            if ( (gh pr view -R ${{ github.repository }} ${{ github.event.pull_request.number }} --json closed | ConvertFrom-Json).closed ) {
               gh run cancel ${{ github.run_id }}
               gh run watch ${{ github.run_id }}
             }
