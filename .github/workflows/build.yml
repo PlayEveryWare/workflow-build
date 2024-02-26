@@ -89,6 +89,7 @@ env:
   VAULT_ADDR: https://vault.office.playeveryware.com:8200
 
 permissions:
+  actions: write
   contents: read
   packages: read
   id-token: write
@@ -113,6 +114,12 @@ jobs:
       slack-thread-channel: ${{ steps.slack.outputs.channel_id }}
       matrix: ${{ steps.matrix.outputs.value }}
     steps:
+
+      - name: Cancel if pull request is closed
+        if: ${{ github.event_name == 'pull_request' && ( github.pull_request.state == 'closed' }}
+        run: |
+            gh run cancel ${{ github.run_id }}
+            gh run watch ${{ github.run_id }}
 
       - name: Validate workflow inputs
         run: |
@@ -424,6 +431,12 @@ jobs:
       file-id-13: ${{ steps.output.outputs.file-id-11 }}
       file-id-14: ${{ steps.output.outputs.file-id-11 }}
     steps:
+
+      - name: Cancel if pull request is closed
+        if: ${{ github.event_name == 'pull_request' && ( github.pull_request.state == 'closed' }}
+        run: |
+            gh run cancel ${{ github.run_id }}
+            gh run watch ${{ github.run_id }}
 
       - name: Forcibly kill existing builds
         run: |
