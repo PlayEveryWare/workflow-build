@@ -273,7 +273,12 @@ jobs:
             exit 1
           }
 
-          echo "value=$( $result.commit.author.date )" >> $env:GITHUB_OUTPUT
+          $timestamp = $result.commit.author.date
+          if ( ! $timestamp.EndsWith( 'Z' ) ) {
+            $timestamp += 'Z'
+          }
+
+          echo "value=$( $timestamp )" >> $env:GITHUB_OUTPUT
 
       - name: Generate artifact names
         id: names
