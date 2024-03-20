@@ -273,7 +273,7 @@ jobs:
             exit 1
           }
 
-          $timestamp = $result.commit.author.date
+          $timestamp = $result.commit.author.date.ToString()
           if ( ! $timestamp.EndsWith( 'Z' ) ) {
             $timestamp += 'Z'
           }
