@@ -459,7 +459,9 @@ jobs:
       - name: Create output index
         id: output-index
         run: |
-          $matrix = ConvertFrom-Json -InputObject '${{ needs.prepare.outputs.matrix }}'
+          $matrix = ConvertFrom-Json -InputObject @"
+          ${{ needs.prepare.outputs.matrix }}
+          "@
           $index = (${{ matrix.platform.index }} * $matrix.configuration.Length) + ${{ matrix.configuration.index }}
           echo "value=$( $index )" >> $env:GITHUB_OUTPUT
 
