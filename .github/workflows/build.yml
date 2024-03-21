@@ -331,6 +331,7 @@ jobs:
               'runner' = "['self-hosted', 'Windows']";
               'sdk' = '${{ inputs.pc32 }}';
               'index' = $platformIndex;
+              'dockerEngine' = 'Windows';
             }
             $platformIndex++
           }
@@ -341,6 +342,7 @@ jobs:
               'runner' = "['self-hosted', 'Windows']";
               'sdk' = '${{ inputs.pc64 }}';
               'index' = $platformIndex;
+              'dockerEngine' = 'Windows';
             }
             $platformIndex++
           }
@@ -351,6 +353,7 @@ jobs:
               'runner' = "['self-hosted', 'Windows']";
               'sdk' = '${{ inputs.nx64 }}';
               'index' = $platformIndex;
+              'dockerEngine' = 'Windows';
             }
             $platformIndex++
           }
@@ -361,6 +364,7 @@ jobs:
               'runner' = "['self-hosted', 'Windows']";
               'sdk' = '${{ inputs.xbs }}';
               'index' = $platformIndex;
+              'dockerEngine' = 'Windows';
             }
             $platformIndex++
           }
@@ -371,6 +375,7 @@ jobs:
               'runner' = "['self-hosted', 'Windows']";
               'sdk' = '${{ inputs.ps4 }}';
               'index' = $platformIndex;
+              'dockerEngine' = 'Windows';
             }
             $platformIndex++
           }
@@ -381,6 +386,7 @@ jobs:
               'runner' = "['self-hosted', 'Windows']";
               'sdk' = '${{ inputs.ps5 }}';
               'index' = $platformIndex;
+              'dockerEngine' = 'Windows';
             }
             $platformIndex++
           }
@@ -528,6 +534,19 @@ jobs:
       - name: Get host resources
         id: host-resources
         uses: PlayEveryWare/action-host-cpumem@v1
+
+      - name: Set docker engine to `$(( matrix.platform.dockerEngine }}`
+        run: |
+          $dockerCli = (Get-Command docker).Source `
+            | Split-Path `
+            | Join-PAth -ChildPath '..\..\DockerCli.exe'
+
+          Start-Process `
+            -Wait `
+            -NoNewWindow `
+            -FilePath $dockerCli `
+            -ArgumentList @("-Switch$${{ matrix.platform.dockerEngine }}Engine ") `
+            ;
 
       - name: Run pre-docker setup
         run: |
